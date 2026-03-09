@@ -44,7 +44,8 @@ export default function DemoCallTracker({ scenario }: DemoCallTrackerProps) {
 
         try {
             const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const url = `${proto}//${window.location.host}/acs-audio?callId=demo-call-ui-001`;
+            const wsHost = import.meta.env.VITE_WS_URL || 'localhost:3001';
+const url = `${proto}//${wsHost}/acs-audio?callId=demo-call-ui-001`;
             addLog(`Attempting connection to ${url}...`);
 
             const ws = new WebSocket(url);
