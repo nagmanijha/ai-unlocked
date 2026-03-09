@@ -36,11 +36,10 @@ export const config = {
         indexName: process.env.AZURE_SEARCH_INDEX || 'askbox-knowledge',
     },
 
-    // Azure OpenAI
-    openai: {
-        endpoint: process.env.AZURE_OPENAI_ENDPOINT || '',
-        key: process.env.AZURE_OPENAI_KEY || '',
-        deployment: process.env.AZURE_OPENAI_DEPLOYMENT || 'gpt-4',
+    // Google Gemini
+    gemini: {
+        apiKey: process.env.GEMINI_API_KEY || '',
+        model: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
     },
 
     // Azure Blob Storage

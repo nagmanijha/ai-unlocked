@@ -19,6 +19,7 @@ export class CallsService {
         } = {}
     ): Promise<PaginatedResponse<CallLog>> {
         const container = cosmosService.getContainer();
+        if (!container) return this.getMockCalls(page, pageSize);
 
         if (!container) {
             // Return mock data for development

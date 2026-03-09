@@ -45,7 +45,7 @@ export default function LandingPage() {
                 <div className="max-w-7xl mx-auto flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <span className="material-symbols-outlined text-primary text-3xl">record_voice_over</span>
-                        <span className="text-xl font-bold tracking-tight text-slate-100 uppercase tracking-widest">VoiceWeave</span>
+                        <span className="text-xl font-bold tracking-tight text-slate-100 uppercase tracking-widest">AskBox</span>
                     </div>
                     <div className="hidden md:flex items-center gap-10">
                         <a href="#" className="text-sm font-medium hover:text-primary transition-colors">Our Vision</a>
@@ -92,7 +92,7 @@ export default function LandingPage() {
                     </p>
                     <div className="flex flex-col sm:flex-row gap-4">
                         <Link to="/login" className="bg-primary text-background-dark h-14 px-10 rounded-xl font-bold text-lg hover:scale-105 transition-transform flex items-center justify-center gap-2">
-                            Try VoiceWeave <span className="material-symbols-outlined">arrow_forward</span>
+                            Try AskBox <span className="material-symbols-outlined">arrow_forward</span>
                         </Link>
                         <button
                             onClick={() => setShowDemoModal(true)}
@@ -201,7 +201,7 @@ export default function LandingPage() {
                             <div className="size-16 rounded-full bg-slate-800 border-2 border-primary shrink-0"></div>
                             <div className="bg-slate-custom/20 p-8 rounded-2xl rounded-tl-none border border-slate-800 relative">
                                 <p className="text-lg text-slate-200 italic mb-4 leading-relaxed">
-                                    "I used to travel 20km to ask the market clerk about crop prices. Now I just call VoiceWeave from my old phone and I know exactly when to sell my harvest."
+                                    "I used to travel 20km to ask the market clerk about crop prices. Now I just call AskBox from my old phone and I know exactly when to sell my harvest."
                                 </p>
                                 <p className="text-primary font-bold">— Rajesh K., Farmer (Bihar)</p>
                             </div>
@@ -221,7 +221,7 @@ export default function LandingPage() {
                             <div className="size-16 rounded-full bg-slate-800 border-2 border-primary shrink-0"></div>
                             <div className="bg-slate-custom/20 p-8 rounded-2xl rounded-tl-none border border-slate-800 relative">
                                 <p className="text-lg text-slate-200 italic mb-4 leading-relaxed">
-                                    "Understanding government schemes was so difficult. VoiceWeave explained the application process in my own language. I finally got my business loan."
+                                    "Understanding government schemes was so difficult. AskBox explained the application process in my own language. I finally got my business loan."
                                 </p>
                                 <p className="text-primary font-bold">— Anita D., Entrepreneur (Rajasthan)</p>
                             </div>
@@ -307,7 +307,7 @@ export default function LandingPage() {
                 <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
                     <div className="flex items-center gap-2">
                         <span className="material-symbols-outlined text-primary">record_voice_over</span>
-                        <span className="text-xl font-bold tracking-tight text-slate-100 uppercase">VoiceWeave</span>
+                        <span className="text-xl font-bold tracking-tight text-slate-100 uppercase">AskBox</span>
                     </div>
                     <div className="flex gap-8 text-sm text-slate-400">
                         <a href="#" className="hover:text-primary">Privacy Policy</a>
@@ -324,7 +324,7 @@ export default function LandingPage() {
                     </div>
                 </div>
                 <div className="max-w-7xl mx-auto mt-8 pt-8 border-t border-slate-800 text-center text-slate-500 text-xs">
-                    © 2024 VoiceWeave Intelligence Systems. All rights reserved.
+                    © 2024 AskBox Intelligence Systems. All rights reserved.
                 </div>
             </footer>
         </div>
