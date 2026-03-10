@@ -9,48 +9,57 @@ import { config } from '../../config';
 export class AuthService {
     /** Register a new user */
     async register(email: string, password: string, name: string): Promise<User> {
-        // Check for existing user
-        const existing = await pool.query('SELECT id FROM admin_users WHERE email = $1', [email]);
-        if (existing.rows.length > 0) {
-            throw new ConflictError('User with this email already exists');
-        }
-
-        const passwordHash = await bcrypt.hash(password, 12);
-        const result = await pool.query(
-            `INSERT INTO admin_users (email, password_hash, name, role)
+        try {
+            const existing = await pool.query('SELECT id FROM admin_users WHERE email = $1', [email]);
+            if (existing.rows.length > 0) {
+                throw new ConflictError('User with this email already exists');
+            }
+            const passwordHash = await bcrypt.hash(password, 12);
+            const result = await pool.query(
+                `INSERT INTO admin_users (email, password_hash, name, role)
              VALUES ($1, $2, $3, 'admin')
              RETURNING id, email, name, created_at, updated_at`,
-            [email, passwordHash, name]
-        );
-
-        return this.mapRow(result.rows[0]);
+                [email, passwordHash, name]
+            );
+            return this.mapRow(result.rows[0]);
+        } catch (error: any) {
+            if (error instanceof ConflictError) throw error;
+            if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+                throw new Error('Database not available. Please set up PostgreSQL to enable registration.');
+            }
+            throw error;
+        }
     }
 
     /** Authenticate user and return JWT */
     async login(email: string, password: string): Promise<{ user: User; token: string }> {
-        const result = await pool.query(
-            'SELECT id, email, password_hash, name, created_at, updated_at FROM admin_users WHERE email = $1',
-            [email]
-        );
-
-        if (result.rows.length === 0) {
-            throw new UnauthorizedError('Invalid email or password');
+        try {
+            const result = await pool.query(
+                'SELECT id, email, password_hash, name, created_at, updated_at FROM admin_users WHERE email = $1',
+                [email]
+            );
+            if (result.rows.length === 0) {
+                throw new UnauthorizedError('Invalid email or password');
+            }
+            const row = result.rows[0];
+            const isValid = await bcrypt.compare(password, row.password_hash);
+            if (!isValid) {
+                throw new UnauthorizedError('Invalid email or password');
+            }
+            const user = this.mapRow(row);
+            const token = jwt.sign(
+                { userId: user.id, email: user.email },
+                config.jwtSecret,
+                { expiresIn: config.jwtExpiresIn } as any
+            );
+            return { user, token };
+        } catch (error: any) {
+            if (error instanceof UnauthorizedError) throw error;
+            if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+                throw new Error('Database not available. Please set up PostgreSQL to enable login.');
+            }
+            throw error;
         }
-
-        const row = result.rows[0];
-        const isValid = await bcrypt.compare(password, row.password_hash);
-        if (!isValid) {
-            throw new UnauthorizedError('Invalid email or password');
-        }
-
-        const user = this.mapRow(row);
-        const token = jwt.sign(
-            { userId: user.id, email: user.email },
-            config.jwtSecret,
-            { expiresIn: config.jwtExpiresIn } as any
-        );
-
-        return { user, token };
     }
 
     /** Get user by ID */

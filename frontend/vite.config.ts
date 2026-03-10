@@ -8,17 +8,17 @@ export default defineConfig({
         host: '0.0.0.0',
         proxy: {
             '/api': {
-                target: 'http://localhost:3001',
+                target: 'http://localhost:5000',
                 changeOrigin: true,
                 secure: false,
             },
             '/ws': {
-                target: 'ws://localhost:3001',
+                target: 'ws://localhost:5000',
                 ws: true,
                 changeOrigin: true,
             },
             '/acs-audio': {
-                target: 'ws://localhost:3001',
+                target: 'ws://localhost:5000',
                 ws: true,
                 changeOrigin: true,
             },
