@@ -167,8 +167,7 @@ export class AudioPipeline {
         session.sendStopAudio();
 
         // Abort the current LLM + TTS workflow
-        const controller = session.startNewTurn(); // Aborts previous turn
-        controller.abort(); // Also abort this new one (we just want to stop)
+        session.abortCurrentTurn();
         session.endTurn();
     }
 

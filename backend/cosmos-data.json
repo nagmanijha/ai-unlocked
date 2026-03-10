@@ -1,0 +1,97 @@
+[
+  {
+    "id": "8522fa9b-6c14-4da8-af09-23108d59ccd2-call_start-1773120198265",
+    "partitionKey": "demo-call-ui-001",
+    "type": "call_start",
+    "sessionId": "8522fa9b-6c14-4da8-af09-23108d59ccd2",
+    "callId": "demo-call-ui-001",
+    "timestamp": "2026-03-10T05:23:18.253Z",
+    "data": {
+      "callerPhoneNumber": "unknown",
+      "initialLanguage": "en-IN"
+    },
+    "_rid": "liBgAJcY7tQBAAAAAAAAAA==",
+    "_self": "dbs/liBgAA==/colls/liBgAJcY7tQ=/docs/liBgAJcY7tQBAAAAAAAAAA==/",
+    "_etag": "\"0000f6ed-0000-2000-0000-69afaac60000\"",
+    "_attachments": "attachments/",
+    "_ts": 1773120198
+  },
+  {
+    "id": "8522fa9b-6c14-4da8-af09-23108d59ccd2-call_end-1773120228270",
+    "partitionKey": "demo-call-ui-001",
+    "type": "call_end",
+    "sessionId": "8522fa9b-6c14-4da8-af09-23108d59ccd2",
+    "callId": "demo-call-ui-001",
+    "timestamp": "2026-03-10T05:23:48.269Z",
+    "data": {
+      "durationSeconds": 30,
+      "totalTurns": 0,
+      "languagesDetected": [
+        "en-IN"
+      ],
+      "schemesAccessed": [],
+      "averageLatencyMs": 0
+    },
+    "_rid": "liBgAJcY7tQCAAAAAAAAAA==",
+    "_self": "dbs/liBgAA==/colls/liBgAJcY7tQ=/docs/liBgAJcY7tQCAAAAAAAAAA==/",
+    "_etag": "\"0000f9ed-0000-2000-0000-69afaae40000\"",
+    "_attachments": "attachments/",
+    "_ts": 1773120228
+  },
+  {
+    "id": "3327bd9d-90e1-476d-bc4f-e4020594ccea-call_start-1773120654460",
+    "partitionKey": "demo-call-ui-001",
+    "type": "call_start",
+    "sessionId": "3327bd9d-90e1-476d-bc4f-e4020594ccea",
+    "callId": "demo-call-ui-001",
+    "timestamp": "2026-03-10T05:30:54.443Z",
+    "data": {
+      "callerPhoneNumber": "unknown",
+      "initialLanguage": "en-IN"
+    },
+    "_rid": "liBgAJcY7tQDAAAAAAAAAA==",
+    "_self": "dbs/liBgAA==/colls/liBgAJcY7tQ=/docs/liBgAJcY7tQDAAAAAAAAAA==/",
+    "_etag": "\"00001eee-0000-2000-0000-69afac8e0000\"",
+    "_attachments": "attachments/",
+    "_ts": 1773120654
+  },
+  {
+    "id": "3327bd9d-90e1-476d-bc4f-e4020594ccea-call_end-1773120684819",
+    "partitionKey": "demo-call-ui-001",
+    "type": "call_end",
+    "sessionId": "3327bd9d-90e1-476d-bc4f-e4020594ccea",
+    "callId": "demo-call-ui-001",
+    "timestamp": "2026-03-10T05:31:24.818Z",
+    "data": {
+      "durationSeconds": 30,
+      "totalTurns": 0,
+      "languagesDetected": [
+        "en-IN"
+      ],
+      "schemesAccessed": [],
+      "averageLatencyMs": 0
+    },
+    "_rid": "liBgAJcY7tQEAAAAAAAAAA==",
+    "_self": "dbs/liBgAA==/colls/liBgAJcY7tQ=/docs/liBgAJcY7tQEAAAAAAAAAA==/",
+    "_etag": "\"000023ee-0000-2000-0000-69afacad0000\"",
+    "_attachments": "attachments/",
+    "_ts": 1773120685
+  },
+  {
+    "id": "55f53dd7-21de-4cf6-8893-5495e54de1e6-call_start-1773120747535",
+    "partitionKey": "demo-call-ui-001",
+    "type": "call_start",
+    "sessionId": "55f53dd7-21de-4cf6-8893-5495e54de1e6",
+    "callId": "demo-call-ui-001",
+    "timestamp": "2026-03-10T05:32:16.576Z",
+    "data": {
+      "callerPhoneNumber": "unknown",
+      "initialLanguage": "en-IN"
+    },
+    "_rid": "liBgAJcY7tQFAAAAAAAAAA==",
+    "_self": "dbs/liBgAA==/colls/liBgAJcY7tQ=/docs/liBgAJcY7tQFAAAAAAAAAA==/",
+    "_etag": "\"00002aee-0000-2000-0000-69afaceb0000\"",
+    "_attachments": "attachments/",
+    "_ts": 1773120747
+  }
+]

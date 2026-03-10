@@ -127,6 +127,12 @@ class AzureSTTController implements STTController {
                 SUPPORTED_LANGUAGES
             );
 
+            // Set silence timeout to 3 seconds (3000ms) for endpointing
+            speechConfig.setProperty(
+                sdk.PropertyId.SpeechServiceConnection_EndSilenceTimeoutMs,
+                '3000'
+            );
+
             this.recognizer = sdk.SpeechRecognizer.FromConfig(
                 speechConfig,
                 autoDetectConfig,

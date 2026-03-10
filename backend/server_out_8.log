@@ -1,0 +1,48 @@
+
+> askbox-admin-backend@1.0.0 dev
+> ts-node-dev --respawn --transpile-only src/app.ts
+
+[INFO] 12:24:04 ts-node-dev ver. 2.0.0 (using ts-node ver. 10.9.2, typescript ver. 5.9.3)
+node.exe : (node:26748) Warning: SECURITY 
+WARNING: The SSL modes 'prefer', 'require', and 
+'verify-ca' are treated as aliases for 
+'verify-full'.
+At line:1 char:1
++ & "C:\nvm4w\nodejs/node.exe" 
+"C:\nvm4w\nodejs/node_modules/npm/bin/np ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ((no 
+   de:26748) Wa... 'verify-full'.:String) [], R  
+  emoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+In the next major version (pg-connection-string 
+v3.0.0 and pg v9.0.0), these modes will adopt 
+standard libpq semantics, which have weaker 
+security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly 
+use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 
+'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq
+-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where 
+the warning was created)
+2026-03-08 12:24:15 [[32minfo[39m]: PostgreSQL connection established successfully
+2026-03-08 12:24:15 [[33mwarn[39m]: Cosmos DB credentials not configured GÇö using mock data
+2026-03-08 12:24:15 [[33mwarn[39m]: Azure AI Search credentials not configured GÇö using mock mode
+2026-03-08 12:24:15 [[33mwarn[39m]: [Redis] Connection failed GÇö falling back to in-memory {"service":"askbox-admin","error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Users\\nagma\\Desktop\\test\\hackathon-msft\\backend\\src\\azure\\redisClient.ts","C:\\Users\\nagma\\Desktop\\test\\hackathon-msft\\backend\\src\\azure\\processAudio.ts","C:\\Users\\nagma\\Desktop\\test\\hackathon-msft\\backend\\src\\app.ts"]}}
+2026-03-08 12:24:15 [[33mwarn[39m]: Azure Storage credentials not configured GÇö uploads will use local storage
+Error: listen EADDRINUSE: address already in use 
+0.0.0.0:5000
+    at Server.setupListenHandle [as _listen2] 
+(node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at processTicksAndRejections 
+(node:internal/process/task_queues:90:21)
+[ERROR] 12:24:15 Error: listen EADDRINUSE: address already in use 0.0.0.0:5000

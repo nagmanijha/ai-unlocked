@@ -74,14 +74,25 @@ export class CallSession {
     public startNewTurn(): AbortController {
         // If a turn is already in progress, abort it (barge-in)
         if (this.turnAbortController) {
-            logger.info(`[Session:${this.sessionId}] Barge-in detected — aborting current turn`);
-            this.turnAbortController.abort();
+            this.abortCurrentTurn();
         }
 
         this.turnAbortController = new AbortController();
         this.isProcessing = true;
         this.metrics.totalTurns++;
         return this.turnAbortController;
+    }
+
+    /**
+     * Abort the current AI turn without starting a new one.
+     * Used for barge-in protection.
+     */
+    public abortCurrentTurn(): void {
+        if (this.turnAbortController) {
+            logger.info(`[Session:${this.sessionId}] Aborting current turn (barge-in)`);
+            this.turnAbortController.abort();
+            this.turnAbortController = null;
+        }
     }
 
     /**
@@ -148,7 +159,7 @@ export class CallSession {
                 kind: 'AudioData',
                 audioData: {
                     data: audioBuffer.toString('base64'),
-                    encoding: 'base64',
+                    encoding: 'PCM-16K-16B-MONO',
                     sampleRate: 16000,
                     channels: 1,
                 },
