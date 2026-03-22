@@ -5,6 +5,8 @@ import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
+import * as fs from 'fs';
+import * as path from 'path';
 
 import { config } from './config';
 import { logger } from './config/logger';
@@ -57,6 +59,38 @@ app.use('/api/calls', callsRoutes);
 app.use('/api/knowledge', knowledgeRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/settings', settingsRoutes);
+
+// Ensure public directories exist
+const summariesDir = path.join(process.cwd(), 'public', 'summaries');
+if (!fs.existsSync(summariesDir)) fs.mkdirSync(summariesDir, { recursive: true });
+
+// Statically serve the 'public' directory at the root /
+app.use(express.static(path.join(process.cwd(), 'public')));
+
+// ─── User Portal Endpoints ──────────────────────────────────────────────────
+
+// Return a list of all summaries
+app.get('/api/summaries', (_req, res) => {
+    try {
+        const files = fs.readdirSync(summariesDir)
+            .filter(f => f.endsWith('.txt'))
+            .map(file => {
+                const stats = fs.statSync(path.join(summariesDir, file));
+                return {
+                    filename: file,
+                    url: `http://localhost:${config.port}/summaries/${file}`,
+                    createdAt: stats.mtime
+                };
+            })
+            // Sort newest first
+            .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+        res.json({ success: true, data: files });
+    } catch (err) {
+        logger.error('[API] Failed to read summaries directory', err);
+        res.status(500).json({ success: false, error: 'Failed to retrieve summaries' });
+    }
+});
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -177,7 +211,7 @@ async function startServer(): Promise<void> {
         // Add robust HTTP Upgrade handling for multiple WebSocket paths
         server.on('upgrade', (request, socket, head) => {
             const pathname = request.url?.split('?')[0];
-            const origin = request.headers.origin;
+            const origin = request.headers.origin || 'unknown';
 
             logger.info(`[Upgrade] Incoming connection: ${pathname} from ${origin}`);
 

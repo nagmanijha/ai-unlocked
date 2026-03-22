@@ -9,6 +9,7 @@ import KnowledgePage from './pages/KnowledgePage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import SettingsPage from './pages/SettingsPage';
 import LandingPage from './pages/LandingPage';
+import UserPortalPage from './pages/UserPortalPage';
 
 /** Protected route wrapper — redirects to login if not authenticated */
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -47,6 +48,9 @@ export default function App() {
                 <Routes>
                     {/* Public Index */}
                     <Route path="/" element={<LandingPage />} />
+                    
+                    {/* User Portal */}
+                    <Route path="/portal" element={<UserPortalPage />} />
 
                     {/* Login */}
                     <Route

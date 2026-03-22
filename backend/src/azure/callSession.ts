@@ -36,6 +36,7 @@ export class CallSession {
 
     // Mutable state
     public language: string = 'en-IN';
+    public isLanguageLocked: boolean = false;
     public isProcessing: boolean = false;
     public conversationHistory: ConversationTurn[] = [];
 
@@ -124,8 +125,10 @@ export class CallSession {
     /**
      * Update the detected language — called after STT Language ID.
      */
-    public setLanguage(lang: string): void {
+    public setLanguage(lang: string, locked: boolean = false): void {
+        if (this.isLanguageLocked && !locked) return;
         this.language = lang;
+        if (locked) this.isLanguageLocked = true;
         this.metrics.languagesDetected.add(lang);
     }
 
@@ -156,6 +159,24 @@ export class CallSession {
             return true;
         } catch (err) {
             logger.error(`[Session:${this.sessionId}] Failed to send audio`, err);
+            return false;
+        }
+    }
+
+    /**
+     * Send a text packet back to the caller via ACS WebSocket.
+     */
+    public sendText(text: string): boolean {
+        if (!this.isAlive()) return false;
+
+        try {
+            this.ws.send(JSON.stringify({
+                kind: 'TextResponse',
+                text
+            }));
+            return true;
+        } catch (err) {
+            logger.error(`[Session:${this.sessionId}] Failed to send text`, err);
             return false;
         }
     }

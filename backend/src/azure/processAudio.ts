@@ -1,8 +1,12 @@
 import { WebSocket } from 'ws';
 import { logger } from '../config/logger';
+import * as fs from 'fs';
+import * as path from 'path';
+import { wrapPcmToWav } from './wavHelper';
+import { v4 as uuidv4 } from 'uuid';
 
 // ── Service Imports ──
-import { CallSession } from './callSession';
+import { CallSession, ConversationTurn } from './callSession';
 import { redisService } from './redisClient';
 import { sttService, STTController, STTResult } from './sttService';
 import { ragService } from './ragService';
@@ -53,8 +57,14 @@ export class AudioPipeline {
         const session = new CallSession(callId, ws);
         this.sessions.set(callId, session);
 
-        // Extract caller phone number from ACS metadata if available
         const callerPhone = req.headers?.['x-acs-caller'] || 'unknown';
+
+        // Extract explicit language preference if provided
+        const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+        const langParam = urlObj.searchParams.get('lang');
+        if (langParam) {
+            session.setLanguage(langParam, true);
+        }
         session.callerPhoneNumber = callerPhone;
 
         logger.info(`[Pipeline] ══════ New call connected ══════`);
@@ -79,14 +89,21 @@ export class AudioPipeline {
         // ═══════════════════════════════════════════════════════════════
         ws.on('message', (data: Buffer | string) => {
             try {
-                if (typeof data === 'string') {
-                    // ACS sends JSON-wrapped base64 audio packets
-                    const payload = JSON.parse(data);
+                // In Node.js ws, text frames often arrive as Buffers. Convert to string to check for JSON.
+                const dataString = Buffer.isBuffer(data) ? data.toString('utf8') : data;
+
+                if (typeof dataString === 'string' && dataString.trim().startsWith('{')) {
+                    // ACS or Frontend sends JSON-wrapped packets
+                    const payload = JSON.parse(dataString);
                     if (payload.kind === 'AudioData') {
                         // Decode base64 → raw PCM (16kHz, 16-bit, mono)
                         const pcmBuffer = Buffer.from(payload.audioData.data, 'base64');
                         session.pushAudio(pcmBuffer);
                         sttController.pushAudio(pcmBuffer);
+                    } else if (payload.kind === 'TextData' && payload.text) {
+                        logger.info(`[Pipeline:${session.sessionId}] 💬 UI Text Input bypass: "${payload.text}"`);
+                        session.addTurn('user', payload.text);
+                        this.executeAIWorkflow(session, payload.text);
                     }
                 } else if (Buffer.isBuffer(data)) {
                     // Direct binary PCM for testing
@@ -94,7 +111,7 @@ export class AudioPipeline {
                     sttController.pushAudio(data);
                 }
             } catch (error) {
-                logger.error(`[Pipeline] Error decoding audio packet`, { error, callId });
+                logger.error(`[Pipeline] Error decoding audio packet`, { error: (error as Error).message, callId });
             }
         });
 
@@ -256,6 +273,7 @@ export class AudioPipeline {
             const chunker = ttsService.createChunker();
             let firstByteSent = false;
             const llmStartTime = Date.now();
+            let fullTurnAudio = Buffer.alloc(0);
 
             for await (const token of llmStream) {
                 if (signal.aborted) {
@@ -273,8 +291,11 @@ export class AudioPipeline {
                 const chunk = chunker.addToken(token);
 
                 if (chunk) {
+                    session.sendText(chunk);
+                    
                     // ── PHASE 3 — CHECKPOINT 8: Audio Stream Playback to ACS ──
                     const audioBuffer = await ttsService.synthesize(chunk, session.language);
+                    fullTurnAudio = Buffer.concat([fullTurnAudio, audioBuffer]);
 
                     if (signal.aborted) break; // Check again after TTS
 
@@ -293,7 +314,22 @@ export class AudioPipeline {
                 const remaining = chunker.flush();
                 if (remaining) {
                     const audioBuffer = await ttsService.synthesize(remaining, session.language);
+                    fullTurnAudio = Buffer.concat([fullTurnAudio, audioBuffer]);
                     session.sendAudio(audioBuffer);
+                }
+            }
+
+            // Save the audio to disk
+            if (fullTurnAudio.length > 0) {
+                try {
+                    const outputDir = path.join(process.cwd(), 'output');
+                    if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+                    const wavBuffer = wrapPcmToWav(fullTurnAudio);
+                    const filename = `response_call-${session.callId}_turn-${session.metrics.totalTurns}.wav`;
+                    fs.writeFileSync(path.join(outputDir, filename), wavBuffer);
+                    logger.info(`[Pipeline:${session.sessionId}] 💾 Saved turn audio to output/${filename}`);
+                } catch (err) {
+                    logger.error(`[Pipeline:${session.sessionId}] Failed to save WAV output`, err);
                 }
             }
 
@@ -362,16 +398,54 @@ export class AudioPipeline {
         // Log call end metrics (non-blocking)
         telemetryService.logCallEnd(session);
 
+        // Disconnect from UI
+        this.sessions.delete(callId);
+
+        // Trigger LLM to summarize the entire conversation in the background (non-blocking)
+        if (session.conversationHistory.length >= 2) {
+            this.generateSummary(callId, session.conversationHistory).catch(err => {
+                logger.error(`[Pipeline] Failed to generate call summary:`, err);
+            });
+        }
+
         // Clean up Redis session state
         redisService.deleteSessionState(callId).catch(() => { });
 
         // Destroy the session (frees all memory)
         session.destroy();
 
-        // Remove from active sessions map
-        this.sessions.delete(callId);
-
         logger.info(`[Pipeline] Session destroyed — active sessions: ${this.sessions.size}`);
+    }
+
+    /**
+     * Non-blocking background task to generate a text summary of the call
+     * and save it to the public backend output directory for the User Portal.
+     */
+    private async generateSummary(callId: string, history: ConversationTurn[]): Promise<void> {
+        logger.info(`[Pipeline] Generating summary for call ${callId}...`);
+        
+        let transcript = history.map(t => `${t.role.toUpperCase()}: ${t.content}`).join('\n\n');
+        let prompt = `Analyze the following telephone conversation transcript and provide a concise, readable summary. Include the caller's main intent and the final resolution.\n\nTranscript:\n${transcript}`;
+        
+        try {
+            const summaryText = await llmService.generateCompletion({
+                messages: [{ role: 'user', content: prompt }]
+            });
+
+            const outputDir = path.join(process.cwd(), 'public', 'summaries');
+            if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+
+            const filename = `summary_${callId}_${Date.now()}.txt`;
+            const filepath = path.join(outputDir, filename);
+
+            // Format for readability
+            const fileContent = `Call ID: ${callId}\nTime: ${new Date().toLocaleString()}\nTurns: ${history.length}\n\n=== CALL SUMMARY ===\n${summaryText.trim()}\n\n=== VERBATIM TRANSCRIPT ===\n${transcript}`;
+            
+            fs.writeFileSync(filepath, fileContent);
+            logger.info(`[Pipeline] ✅ Call summary successfully saved to ${filepath}`);
+        } catch (err) {
+            logger.error(`[Pipeline] Failed to generate summary:`, err);
+        }
     }
 
     /**

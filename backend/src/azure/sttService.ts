@@ -122,30 +122,68 @@ class AzureSTTController implements STTController {
                 'Continuous'
             );
 
-            // Auto-detect from all 8 supported Indian languages
-            const autoDetectConfig = sdk.AutoDetectSourceLanguageConfig.fromLanguages(
-                SUPPORTED_LANGUAGES
+            // AGGRESSIVE ENDPOINTING: Reduce the wait time for silence detection
+            // to just 500ms, shaving off nearly a full second of latency.
+            speechConfig.setProperty(
+                sdk.PropertyId.Speech_SegmentationSilenceTimeoutMs,
+                '500'
+            );
+            speechConfig.setProperty(
+                sdk.PropertyId.SpeechServiceConnection_EndSilenceTimeoutMs,
+                '500'
+            );
+            speechConfig.setProperty(
+                sdk.PropertyId.SpeechServiceConnection_InitialSilenceTimeoutMs,
+                '3000'
             );
 
-            this.recognizer = sdk.SpeechRecognizer.FromConfig(
-                speechConfig,
-                autoDetectConfig,
-                audioConfig
-            );
+            if (session.isLanguageLocked && session.language) {
+                // If language was explicitly selected in the UI, bypass AutoDetect completely
+                // This shaves off ~500-1000ms of language confidence calculation!
+                speechConfig.speechRecognitionLanguage = session.language;
+                this.recognizer = new sdk.SpeechRecognizer(
+                    speechConfig,
+                    audioConfig
+                );
+            } else {
+                // Auto-detect from all 8 supported Indian languages
+                const autoDetectConfig = sdk.AutoDetectSourceLanguageConfig.fromLanguages(
+                    SUPPORTED_LANGUAGES
+                );
+                
+                this.recognizer = sdk.SpeechRecognizer.FromConfig(
+                    speechConfig,
+                    autoDetectConfig,
+                    audioConfig
+                );
+            }
 
             // ── Event: Interim results (user is speaking) ──
             this.recognizer.recognizing = (_sender: any, event: any) => {
-                if (event.result.text && onSpeechStart) {
-                    onSpeechStart();
+                const text = event.result.text;
+                if (text) {
+                    logger.debug(`[STT:Interim] ${text}`);
+                    if (onSpeechStart) onSpeechStart();
                 }
             };
 
             // ── Event: Final result (endpointing — user stopped speaking) ──
             this.recognizer.recognized = (_sender: any, event: any) => {
                 const result = event.result;
+                
                 if (result.reason === sdk.ResultReason.RecognizedSpeech && result.text) {
-                    const langResult = sdk.AutoDetectSourceLanguageResult.fromResult(result);
-                    const detectedLang = langResult?.language || session.language;
+                    let detectedLang = session.language;
+                    
+                    if (!session.isLanguageLocked) {
+                        try {
+                            const langResult = sdk.AutoDetectSourceLanguageResult.fromResult(result);
+                            if (langResult?.language) {
+                                detectedLang = langResult.language;
+                            }
+                        } catch (err) {
+                            // Ignored: parsing fails natively if the stream isn't flagged for AutoDetect
+                        }
+                    }
 
                     onRecognized({
                         text: result.text,
@@ -153,7 +191,25 @@ class AzureSTTController implements STTController {
                         confidence: result.properties?.getProperty('SpeechServiceResponse_JsonResult')
                             ? 0.9 : 0.8,
                     });
+                } else if (result.reason === sdk.ResultReason.NoMatch) {
+                    logger.debug(`[STT] No Match (Silence or Unintelligible). Details: ${result.errorDetails || 'None'}`);
+                } else {
+                    logger.debug(`[STT] Recognized reason: ${result.reason}`);
                 }
+            };
+
+            // ── Event: Canceled (Errors, Auth failures, invalid region) ──
+            this.recognizer.canceled = (_sender: any, event: any) => {
+                logger.error(`[STT] Recognition CANCELED for session ${session.sessionId}`, {
+                    reason: event.reason,
+                    errorCode: event.errorCode,
+                    errorDetails: event.errorDetails,
+                });
+            };
+
+            // ── Event: Session Stopped (Connection closed) ──
+            this.recognizer.sessionStopped = (_sender: any, event: any) => {
+                logger.info(`[STT] Session STOPPED for session ${session.sessionId}`);
             };
 
             // Start continuous recognition
@@ -169,8 +225,15 @@ class AzureSTTController implements STTController {
         }
     }
 
+    private _firstPacketLogged = false;
+
     pushAudio(pcmBuffer: Buffer): void {
         if (this.audioStream) {
+            if (!this._firstPacketLogged) {
+                logger.info(`[STT] Feeding audio to Azure stream for the first time...`);
+                this._firstPacketLogged = true;
+            }
+            
             // Feed raw PCM bytes directly to the push stream
             // ACS sends 16kHz, 16-bit, mono PCM — exactly what Speech SDK expects
             this.audioStream.write(pcmBuffer.buffer.slice(
@@ -206,22 +269,22 @@ class AzureSTTController implements STTController {
 /**
  * Mock STT controller for local development.
  *
- * Simulates endpointing by detecting silence (no audio for 2 seconds after
- * receiving at least 50 packets). Returns pre-defined responses that match
- * the curriculum/scheme context.
+ * Simulates endpointing by returning pre-defined responses that match
+ * the curriculum/scheme context after receiving 100 packets (2 seconds).
+ * Blocks further processing for 10 seconds to allow the AI to reply.
  */
 class MockSTTController implements STTController {
     private session: CallSession;
     private onRecognized: STTCallback;
     private onSpeechStart?: SpeechStartCallback;
     private packetCount: number = 0;
-    private silenceTimer: NodeJS.Timeout | null = null;
     private speechStarted: boolean = false;
+    private hasRecognized: boolean = false;
 
     private mockResponses: Array<{ text: string; language: string }> = [
         { text: 'What is photosynthesis?', language: 'en-IN' },
         { text: 'Pradhan Mantri Awas Yojana ke baare mein batao', language: 'hi-IN' },
-        { text: 'Newton\'s third law explain karo', language: 'hi-IN' },
+        { text: "Newton's third law explain karo", language: 'hi-IN' },
         { text: 'Solar system mein kitne planets hain?', language: 'en-IN' },
         { text: 'Pani ka cycle kya hota hai?', language: 'hi-IN' },
     ];
@@ -234,6 +297,8 @@ class MockSTTController implements STTController {
     }
 
     pushAudio(pcmBuffer: Buffer): void {
+        if (this.hasRecognized) return;
+
         this.packetCount++;
 
         // Simulate "speech start" after first few packets
@@ -242,30 +307,30 @@ class MockSTTController implements STTController {
             this.onSpeechStart();
         }
 
-        // Reset silence timer on every packet
-        if (this.silenceTimer) clearTimeout(this.silenceTimer);
+        // Endpointing after 2 seconds of audio (100 packets at 20ms each)
+        if (this.packetCount > 100) {
+            this.hasRecognized = true;
+            const mock = this.mockResponses[this.responseIndex % this.mockResponses.length];
+            this.responseIndex++;
+            this.speechStarted = false;
 
-        // After enough packets, start a silence timer
-        if (this.packetCount > 30) {
-            this.silenceTimer = setTimeout(() => {
-                // Endpointing — user stopped speaking
-                const mock = this.mockResponses[this.responseIndex % this.mockResponses.length];
-                this.responseIndex++;
+            this.onRecognized({
+                text: mock.text,
+                language: mock.language,
+                confidence: 0.92,
+            });
+
+            // Wait 10 seconds before allowing the next mock turn
+            setTimeout(() => {
+                this.hasRecognized = false;
                 this.packetCount = 0;
-                this.speechStarted = false;
-
-                this.onRecognized({
-                    text: mock.text,
-                    language: mock.language,
-                    confidence: 0.92,
-                });
-            }, 1500); // 1.5s silence = endpointing
+            }, 10000);
         }
     }
 
     async stop(): Promise<void> {
-        if (this.silenceTimer) clearTimeout(this.silenceTimer);
         this.packetCount = 0;
+        this.hasRecognized = false;
     }
 }
 

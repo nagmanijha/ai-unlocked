@@ -4,13 +4,13 @@ import { config } from '../config';
 /**
  * Phase 2 — Checkpoint 6: Asynchronous LLM Streaming
  *
- * Google Gemini streaming client (replaces Azure OpenAI).
+ * Supports Azure OpenAI and Google Gemini via REST API (SSE streaming).
  *
  * KEY DESIGN: Returns an AsyncIterable<string> of tokens so the caller
  * can pipe them directly into the TTS chunker without waiting for the
  * full paragraph to generate. Supports AbortSignal for barge-in cancellation.
  *
- * Falls back to a mock streaming generator when GEMINI_API_KEY is not set.
+ * Falls back to a mock streaming generator when API keys are not set.
  *
  * API reference:
  *   POST https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent
@@ -44,37 +44,142 @@ function toGeminiContents(
 }
 
 class LLMService {
-    private apiKey: string;
-    private model: string;
-    private baseUrl: string;
+    private geminiApiKey: string;
+    private geminiModel: string;
+    private geminiBaseUrl: string;
+
+    private azureOpenAIKey: string;
+    private azureOpenAIEndpoint: string;
+    private azureOpenAIDeployment: string;
 
     constructor() {
-        this.apiKey = config.gemini.apiKey;
-        this.model = config.gemini.model;
-        this.baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
+        this.geminiApiKey = config.gemini.apiKey;
+        this.geminiModel = config.gemini.model;
+        this.geminiBaseUrl = 'https://generativelanguage.googleapis.com/v1beta';
+
+        this.azureOpenAIKey = config.openai.key;
+        this.azureOpenAIEndpoint = config.openai.endpoint;
+        this.azureOpenAIDeployment = config.openai.deployment;
     }
 
     /**
-     * Stream tokens from Google Gemini.
-     *
-     * Uses the SSE-based streamGenerateContent endpoint. Each chunk is a
-     * JSON object with candidates[0].content.parts[0].text.
-     *
-     * Supports AbortSignal for barge-in: if the caller aborts, we cancel
-     * the fetch and return immediately.
+     * Stream tokens from selected LLM provider.
+     * Prefers Azure OpenAI, falls back to Gemini, then Mock.
+     * Supports AbortSignal for barge-in.
      */
     async *streamCompletion(options: LLMStreamOptions): AsyncGenerator<string, void, undefined> {
-        const { messages, signal, temperature = 0.7, maxTokens = 800 } = options;
-
-        if (!this.apiKey) {
-            logger.warn('[LLM] GEMINI_API_KEY not set — using mock stream');
-            yield* this.mockStream(messages, signal);
+        if (this.azureOpenAIKey && this.azureOpenAIEndpoint) {
+            logger.info('[LLM] Using Azure OpenAI');
+            yield* this.streamAzureOpenAI(options);
             return;
         }
 
+        if (this.geminiApiKey) {
+            logger.info('[LLM] Using Google Gemini');
+            yield* this.streamGemini(options);
+            return;
+        }
+
+        logger.warn('[LLM] No LLM API keys set — using mock stream');
+        yield* this.mockStream(options.messages, options.signal);
+    }
+
+    /**
+     * Generate a complete text response synchronously (no streaming).
+     * Used for background tasks like summarizing transcripts without a WebSocket.
+     */
+    async generateCompletion(options: LLMStreamOptions): Promise<string> {
+        let fullResponse = '';
+        const stream = this.streamCompletion(options);
+        for await (const token of stream) {
+            fullResponse += token;
+        }
+        return fullResponse;
+    }
+
+    private async *streamAzureOpenAI(options: LLMStreamOptions): AsyncGenerator<string, void, undefined> {
+        const { messages, signal, maxTokens = 800 } = options;
+        const endpoint = this.azureOpenAIEndpoint.replace(/\/$/, "");
+        const url = `${endpoint}/openai/deployments/${this.azureOpenAIDeployment}/chat/completions?api-version=2024-02-15-preview`;
+
+        const body = {
+            messages,
+            temperature: 1,
+            max_completion_tokens: maxTokens,
+            stream: true,
+        };
+
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'api-key': this.azureOpenAIKey,
+                },
+                body: JSON.stringify(body),
+                signal,
+            });
+
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(`Azure OpenAI SDK Error ${response.status}: ${errText}`);
+            }
+
+            const reader = response.body?.getReader();
+            if (!reader) throw new Error('No response body reader');
+
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                if (signal?.aborted) {
+                    logger.info('[LLM] Stream aborted (barge-in)');
+                    reader.cancel();
+                    return;
+                }
+
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+
+                const lines = buffer.split('\n');
+                buffer = lines.pop() ?? '';
+
+                for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (!trimmed.startsWith('data: ')) continue;
+
+                    const jsonStr = trimmed.slice(6).trim();
+                    if (!jsonStr || jsonStr === '[DONE]') continue;
+
+                    try {
+                        const chunk = JSON.parse(jsonStr);
+                        const text = chunk?.choices?.[0]?.delta?.content;
+                        if (text) {
+                            yield text;
+                        }
+                    } catch {
+                        // skip
+                    }
+                }
+            }
+        } catch (error: any) {
+            if (error.name === 'AbortError') {
+                logger.info('[LLM] Stream aborted by AbortSignal');
+                return;
+            }
+            logger.error('[LLM] Azure OpenAI streaming failed', error);
+            yield 'I am sorry, I am having trouble answering right now. Please try again in a moment.';
+        }
+    }
+
+    private async *streamGemini(options: LLMStreamOptions): AsyncGenerator<string, void, undefined> {
+        const { messages, signal, temperature = 0.7, maxTokens = 800 } = options;
+
         const { systemInstruction, contents } = toGeminiContents(messages);
 
-        const url = `${this.baseUrl}/models/${this.model}:streamGenerateContent?key=${this.apiKey}&alt=sse`;
+        const url = `${this.geminiBaseUrl}/models/${this.geminiModel}:streamGenerateContent?key=${this.geminiApiKey}&alt=sse`;
 
         const body: Record<string, any> = {
             contents,
@@ -121,7 +226,6 @@ class LLMService {
 
                 buffer += decoder.decode(value, { stream: true });
 
-                // Gemini SSE: lines starting with "data: " followed by JSON
                 const lines = buffer.split('\n');
                 buffer = lines.pop() ?? ''; // keep incomplete line
 

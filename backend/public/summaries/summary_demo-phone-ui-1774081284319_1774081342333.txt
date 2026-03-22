@@ -1,0 +1,13 @@
+Call ID: demo-phone-ui-1774081284319
+Time: 3/21/2026, 1:52:22 PM
+Turns: 3
+
+=== CALL SUMMARY ===
+The caller asked if the assistant could recognize a song simply by listening to it. They then issued a command in Telugu asking to start the camera in selfie mode. The assistant responded that it cannot listen to audio during a phone call or recognize songs by hearing them, so the request could not be fulfilled. No further action was taken.
+
+=== VERBATIM TRANSCRIPT ===
+USER: Can you recognise the song just while listening it?
+
+USER: సెల్ఫీ మోడ్‌లో కెమెరా మొదలుపెట్టండి.
+
+ASSISTANT: I cannot listen to audio in a phone call or recognize songs by hearing them.

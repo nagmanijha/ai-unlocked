@@ -1,0 +1,30 @@
+Call ID: demo-phone-ui-1774098546798
+Time: 3/21/2026, 6:40:26 PM
+Turns: 7
+
+=== CALL SUMMARY ===
+Caller: Rishabh, a student.
+
+Main intent: He contacted the service to ask for help learning science because he feels weak in the subject.
+
+Conversation summary:  
+The caller first asked the assistant’s name. The assistant introduced itself as AskBox and explained it helps with education and government scheme information. The caller then introduced himself as Rishabh, said he is a student, and asked for help learning science because he struggles with it.
+
+Final resolution:  
+The assistant responded positively and expressed willingness to help Rishabh learn, but no specific science guidance was provided yet in the transcript.
+
+=== VERBATIM TRANSCRIPT ===
+USER: What is your name?
+
+USER: Tell me your name.
+
+ASSISTANT: My name is AskBox. I am here to help with questions about school studies and government services. How can I help you today?
+
+ASSISTANT: My name is AskBox.  
+I am here to help with education and government scheme information. How can I help you today?
+
+USER: Actually I am a student and I want to learn.
+
+ASSISTANT: That’s great! I’m happy to help you learn.
+
+USER: Myself Rishabh, I just want to know about science. I am very weak in it so can you please help me in learning?

@@ -170,6 +170,7 @@ export class TextChunker {
     private buffer: string = '';
     private minChunkLength: number = 20;   // Don't yield tiny fragments
     private maxChunkLength: number = 150;  // Force yield after this many chars
+    private isFirstChunk: boolean = true;  // Used to accelerate TTFB
 
     /**
      * Add a token from the LLM stream. Returns a chunk if a natural
@@ -178,14 +179,22 @@ export class TextChunker {
     addToken(token: string): string | null {
         this.buffer += token;
 
+        // ACCELERATED TTFB: Allow the very first spoken chunk (e.g., "Hello!")
+        // to bypass the 20 character minimum boundary, instantly forcing out audio.
+        const effectiveMinLength = this.isFirstChunk ? 3 : this.minChunkLength;
+
         // Check for sentence boundaries
-        if (this.buffer.length >= this.minChunkLength) {
+        if (this.buffer.length >= effectiveMinLength) {
             const sentenceMatch = this.buffer.match(SENTENCE_BOUNDARIES);
             if (sentenceMatch && sentenceMatch.index !== undefined) {
                 const endIdx = sentenceMatch.index + sentenceMatch[0].length;
                 const chunk = this.buffer.slice(0, endIdx).trim();
                 this.buffer = this.buffer.slice(endIdx);
-                if (chunk.length > 0) return chunk;
+                
+                if (chunk.length > 0) {
+                    this.isFirstChunk = false; // The zero-latency opening phrase is complete!
+                    return chunk;
+                }
             }
         }
 

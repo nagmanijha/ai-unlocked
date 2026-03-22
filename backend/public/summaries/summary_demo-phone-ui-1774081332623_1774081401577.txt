@@ -1,0 +1,14 @@
+Call ID: demo-phone-ui-1774081332623
+Time: 3/21/2026, 1:53:21 PM
+Turns: 3
+
+=== CALL SUMMARY ===
+The caller first checked whether the assistant could hear them. After the assistant confirmed, the caller asked for the multiplication table of 2.  
+Final resolution: The request for the table of 2 was made, but the transcript ends before the assistant provides the answer.
+
+=== VERBATIM TRANSCRIPT ===
+USER: క్యాన్ యూ హియర్, మీ.
+
+ASSISTANT: Yes, I can hear you. How can I help you today?
+
+USER: Tell me the table of 2.

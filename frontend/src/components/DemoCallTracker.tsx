@@ -14,6 +14,7 @@ export default function DemoCallTracker({ scenario }: DemoCallTrackerProps) {
     const [logs, setLogs] = useState<string[]>([]);
     const [packetsSent, setPacketsSent] = useState(0);
     const [messagesReceived, setMessagesReceived] = useState(0);
+    const [textInput, setTextInput] = useState('');
 
     const wsRef = useRef<WebSocket | null>(null);
     const intervalRef = useRef<number | null>(null);
@@ -29,7 +30,11 @@ export default function DemoCallTracker({ scenario }: DemoCallTrackerProps) {
         }
     }, [logs]);
 
-    const startDemoCall = () => {
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const mediaStreamRef = useRef<MediaStream | null>(null);
+    const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
+
+    const startDemoCall = async () => {
         if (wsRef.current) return;
 
         setStatus('connecting');
@@ -38,14 +43,23 @@ export default function DemoCallTracker({ scenario }: DemoCallTrackerProps) {
         setMessagesReceived(0);
 
         addLog(`Initializing ${scenario?.language || ''} voice pipeline demonstration...`);
-        if (scenario) {
-            addLog(`Simulated Query: "${scenario.query}"`);
-        }
+        addLog(`Requesting microphone access...`);
 
         try {
+            // Request microphone access
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true,
+                } 
+            });
+            mediaStreamRef.current = stream;
+            addLog(`Microphone access granted!`);
+
             const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsHost = import.meta.env.VITE_WS_URL || 'localhost:3001';
-const url = `${proto}//${wsHost}/acs-audio?callId=demo-call-ui-001`;
+            const url = `${proto}//${wsHost}/acs-audio?callId=demo-call-ui-001`;
             addLog(`Attempting connection to ${url}...`);
 
             const ws = new WebSocket(url);
@@ -56,29 +70,40 @@ const url = `${proto}//${wsHost}/acs-audio?callId=demo-call-ui-001`;
             ws.onopen = () => {
                 setStatus('active');
                 addLog('✅ WebSocket connected to Audio Pipeline');
-                addLog('📤 Sending mock voice packets (16kHz PCM)...');
+                addLog('🎙️ Please speak now. Streaming real microphone audio...');
 
-                // Send mock packets every 20ms
-                intervalRef.current = window.setInterval(() => {
+                // Initialize Audio API with exactly 16kHz for Azure STT
+                const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({
+                    sampleRate: 16000
+                });
+                audioContextRef.current = audioCtx;
+
+                const source = audioCtx.createMediaStreamSource(stream);
+                const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+                scriptProcessorRef.current = processor;
+
+                processor.onaudioprocess = (e) => {
                     if (ws.readyState !== WebSocket.OPEN) return;
 
-                    // Mock 20ms of 16kHz audio data (Base64)
-                    // 640 bytes = 20ms 16kHz 16-bit mono
-                    // Creating a dummy buffer full of zeros for simplicity in the browser
-                    const mockAudioBuffer = new Uint8Array(640);
-                    for (let i = 0; i < mockAudioBuffer.length; i++) {
-                        mockAudioBuffer[i] = Math.floor(Math.random() * 255); // Random noise
+                    // 1. Get Float32 PCM from mic (-1.0 to 1.0)
+                    const float32Audio = e.inputBuffer.getChannelData(0);
+                    
+                    // 2. Convert Float32 to Int16 PCM
+                    const int16Audio = new Int16Array(float32Audio.length);
+                    for (let i = 0; i < float32Audio.length; i++) {
+                        let s = Math.max(-1, Math.min(1, float32Audio[i]));
+                        int16Audio[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
                     }
 
-                    // Convert Uint8Array to Base64 (simple hacky way for small buffers)
+                    // 3. Convert Int16Array to Base64 (safest cross-browser loop)
+                    const uint8Audio = new Uint8Array(int16Audio.buffer);
                     let binary = '';
-                    const bytes = new Uint8Array(mockAudioBuffer);
-                    const len = bytes.byteLength;
-                    for (let i = 0; i < len; i++) {
-                        binary += String.fromCharCode(bytes[i]);
+                    for (let i = 0; i < uint8Audio.length; i++) {
+                        binary += String.fromCharCode(uint8Audio[i]);
                     }
                     const base64Data = btoa(binary);
 
+                    // 4. Send ACS AudioPacket format
                     const packet = JSON.stringify({
                         kind: 'AudioData',
                         audioData: {
@@ -91,15 +116,18 @@ const url = `${proto}//${wsHost}/acs-audio?callId=demo-call-ui-001`;
 
                     ws.send(packet);
                     setPacketsSent(prev => prev + 1);
-                }, 20);
+                };
 
-                // Auto-stop after 30 seconds
+                source.connect(processor);
+                processor.connect(audioCtx.destination);
+
+                // Auto-stop after 45 seconds so it doesn't "just keep taking packets" forever
                 setTimeout(() => {
                     if (wsRef.current?.readyState === WebSocket.OPEN) {
-                        addLog('⏱️ 30 seconds elapsed. Ending test call.');
+                        addLog('⏱️ 45 seconds elapsed. Ending mock call.');
                         stopDemoCall();
                     }
-                }, 30000);
+                }, 45000);
             };
 
             ws.onmessage = (event) => {
@@ -107,8 +135,9 @@ const url = `${proto}//${wsHost}/acs-audio?callId=demo-call-ui-001`;
                 try {
                     const msg = JSON.parse(event.data);
                     if (msg.kind === 'AudioData') {
-                        // It's TTS returning!
                         addLog('🔊 [TTS] Received audio chunk from Azure Neural Pipeline');
+                    } else if (msg.kind === 'TextResponse') {
+                        addLog(`🤖 [AI] ${msg.text}`);
                     } else {
                         addLog(`📩 [System] ${JSON.stringify(msg).substring(0, 100)}`);
                     }
@@ -132,21 +161,44 @@ const url = `${proto}//${wsHost}/acs-audio?callId=demo-call-ui-001`;
 
         } catch (error) {
             setStatus('error');
-            addLog('❌ Failed to create WebSocket connection');
+            addLog('❌ Failed to create WebSocket connection or access microphone');
             console.error(error);
         }
     };
 
     const stopDemoCall = (forceClose = true) => {
-        if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
+        // Cleanup Audio Context
+        if (scriptProcessorRef.current) {
+            scriptProcessorRef.current.disconnect();
+            scriptProcessorRef.current = null;
         }
+        if (audioContextRef.current) {
+            audioContextRef.current.close().catch(console.error);
+            audioContextRef.current = null;
+        }
+        if (mediaStreamRef.current) {
+            mediaStreamRef.current.getTracks().forEach(t => t.stop());
+            mediaStreamRef.current = null;
+        }
+
         if (wsRef.current && forceClose) {
             wsRef.current.close(1000, 'Demo stopped by user');
         }
         wsRef.current = null;
         setStatus(prev => prev === 'active' || prev === 'connecting' ? 'completed' : prev);
+    };
+
+    const sendTextQuery = (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+        if (!textInput.trim()) return;
+
+        addLog(`💬 You asked: "${textInput}"`);
+        wsRef.current.send(JSON.stringify({
+            kind: 'TextData',
+            text: textInput
+        }));
+        setTextInput('');
     };
 
     return (
@@ -193,6 +245,27 @@ const url = `${proto}//${wsHost}/acs-audio?callId=demo-call-ui-001`;
                     <p className="text-2xl font-black text-accent-teal">{messagesReceived}</p>
                     <p className="text-[10px] text-slate-600">AI audio response stream</p>
                 </div>
+            </div>
+
+            {/* TEXT INPUT BYPASS */}
+            <div className="mb-4">
+                <form onSubmit={sendTextQuery} className="flex gap-2">
+                    <input 
+                        type="text" 
+                        value={textInput}
+                        onChange={(e) => setTextInput(e.target.value)}
+                        placeholder="Microphone broken? Type your question here..." 
+                        className="flex-1 bg-background-dark/50 border border-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-primary text-white disabled:opacity-50"
+                        disabled={status !== 'active'}
+                    />
+                    <button 
+                        type="submit"
+                        disabled={status !== 'active' || !textInput.trim()}
+                        className="px-4 py-2 bg-accent-teal/20 text-accent-teal border border-accent-teal/50 font-bold rounded-lg hover:bg-accent-teal/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                        Send
+                    </button>
+                </form>
             </div>
 
             <div className="bg-black/90 p-4 rounded-xl border border-slate-800 font-mono text-[11px] h-48 overflow-y-auto space-y-2">

@@ -1,0 +1,2 @@
+src/azure/redisClient.ts(41,41): error TS2307: Cannot find module 'ioredis' or its corresponding type declarations.
+src/middleware/auth.ts(14,65): error TS2353: Object literal may only specify known properties, and 'role' does not exist in type 'JwtPayload'.
